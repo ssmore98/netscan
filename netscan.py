@@ -8,7 +8,10 @@ import io
 import re
 import time
 import os
+import nmap
+from pprint import pprint
 import wx
+import wx.lib.scrolledpanel
 
 MYNAME = os.path.splitext(os.path.basename(sys.argv[0]))[0]
 MYDIR = '{HOME}/.config/{NAME}'.format(HOME=os.getenv("HOME"), NAME=MYNAME)
@@ -54,6 +57,63 @@ class MainFrame(wx.Frame):
     """
     def __init__(self, *args, **kw):
         super(MainFrame, self).__init__(*args, **kw)
+        fileMenu = wx.Menu()
+        scanItem = fileMenu.Append(wx.ID_ANY, 'Scan')
+        exitItem = fileMenu.Append(wx.ID_EXIT)
+        menuBar = wx.MenuBar()
+        menuBar.Append(fileMenu, "&File")
+        self.SetMenuBar(menuBar)
+        self.Bind(wx.EVT_MENU, self.OnExit, exitItem)
+        self.Bind(wx.EVT_MENU, self.scan, scanItem)
+
+        self.panel = wx.Panel(self, size=(1024, 720))
+        self.notebook = wx.Notebook(self.panel)
+
+        self.sizer = wx.BoxSizer(orient=wx.VERTICAL)
+        self.sizer.Add(self.notebook, wx.SizerFlags().Border(wx.TOP|wx.LEFT, 25).Expand().Proportion(10))
+        self.panel.SetSizer(self.sizer)
+
+        self.tabs = []
+
+        self.CreateStatusBar()
+        self.SetStatusText("{0} hosts found".format(len(self.tabs)))
+
+    def scan(self, event):
+        LOGGER.info("Scan started")
+        port_scanner = nmap.nmap.PortScannerYield()
+        # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-sV --version-intensity 0'):
+        # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-A -T4'):
+        # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-sn'):
+        for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-PE -n'):
+            if len(host[1]['scan']):
+                panel = wx.lib.scrolledpanel.ScrolledPanel(self.notebook)
+                sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                for ip in host[1]['scan'].keys():
+                    ip_panel =  wx.StaticBox(panel)
+                    sizer.Add(ip_panel, 1, wx.EXPAND)
+                    ip_sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                    for attrib in host[1]['scan'][ip].keys():
+                        attrib_panel =  wx.StaticBox(ip_panel, label=attrib)
+                        ip_sizer.Add(attrib_panel, 1, wx.EXPAND)
+                        attrib_sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                        for item in host[1]['scan'][ip][attrib]:
+                            attrib_sizer.Add(wx.StaticText(attrib_panel, label="{0}".format(item)), 1, wx.EXPAND)
+                        # LOGGER.debug("{0} {1}".format(attrib, list(host[1]['scan'][ip][attrib])))
+                        attrib_panel.SetSizer(attrib_sizer)
+                    ip_panel.SetSizer(ip_sizer)
+                panel.SetSizer(sizer)
+                self.tabs.append(panel)
+                panel.SetupScrolling()
+                self.notebook.AddPage(self.tabs[len(self.tabs) - 1], host[0])
+                self.SetStatusText("{0} hosts found".format(len(self.tabs)))
+            else:
+                LOGGER.debug("Host %s is not alive" % host[0])
+            wx.GetApp().Yield()
+        LOGGER.info("Scan ended")
+
+    def OnExit(self, event):
+        """Close the frame, terminating the application."""
+        self.Close(True)
 
 def main():
     """
@@ -80,7 +140,7 @@ if __name__ == '__main__':
     CONSOLEHANDLER = logging.StreamHandler()
     CONSOLEHANDLER.setFormatter(CLOGFORMATTER)
     LOGGER.addHandler(CONSOLEHANDLER)
-    LOGGER.setLevel(logging.INFO)
+    LOGGER.setLevel(logging.DEBUG)
     LOGGER.info('Command line: %s', ' '.join(sys.argv))
 
     try:
