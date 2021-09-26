@@ -78,30 +78,52 @@ class MainFrame(wx.Frame):
         self.CreateStatusBar()
         self.SetStatusText("{0} hosts found".format(len(self.tabs)))
 
+    def insert(self, tree, item, data):
+        if type(data) == str:
+            tree.SetItemText(item, '{0} = {1}'.format(tree.GetItemText(item), data))
+        elif type(data) == list:
+            for i in data:
+                # nitem = tree.AppendItem(item, '{0}'.format(i))
+                self.insert(tree, item, i)
+        elif type(data) == dict:
+            for i in data:
+                nitem = tree.AppendItem(item, '{0}'.format(i))
+                self.insert(tree, nitem, data[i])
+
     def scan(self, event):
         LOGGER.info("Scan started")
         port_scanner = nmap.nmap.PortScannerYield()
         # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-sV --version-intensity 0'):
         # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-A -T4'):
-        # for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-sn'):
-        for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-PE -n'):
+        for host in port_scanner.scan(hosts='10.1.1.1/24', arguments='-sn'):
+        # for host in port_scanner.scan(hosts='10.1.1.1/28', arguments='-PE -n'):
             if len(host[1]['scan']):
+                pprint(host)
                 panel = wx.lib.scrolledpanel.ScrolledPanel(self.notebook)
                 sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                panel.SetSizer(sizer)
                 for ip in host[1]['scan'].keys():
-                    ip_panel =  wx.StaticBox(panel)
+                    tree = wx.TreeCtrl(panel)
+                    sizer.Add(tree, 1, wx.EXPAND)
+                    root = tree.AddRoot(ip)
+                    for attrib in host[1]['scan'][ip].keys():
+                        item = tree.AppendItem(root, attrib)
+                        self.insert(tree, item, host[1]['scan'][ip][attrib])
+                    tree.ExpandAll()
+                '''
+                    ip_panel =  wx.StaticBox(panel, label=ip)
                     sizer.Add(ip_panel, 1, wx.EXPAND)
                     ip_sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                    ip_panel.SetSizer(ip_sizer)
                     for attrib in host[1]['scan'][ip].keys():
                         attrib_panel =  wx.StaticBox(ip_panel, label=attrib)
                         ip_sizer.Add(attrib_panel, 1, wx.EXPAND)
                         attrib_sizer = wx.BoxSizer(orient=wx.VERTICAL)
+                        attrib_panel.SetSizer(attrib_sizer)
                         for item in host[1]['scan'][ip][attrib]:
                             attrib_sizer.Add(wx.StaticText(attrib_panel, label="{0}".format(item)), 1, wx.EXPAND)
                         # LOGGER.debug("{0} {1}".format(attrib, list(host[1]['scan'][ip][attrib])))
-                        attrib_panel.SetSizer(attrib_sizer)
-                    ip_panel.SetSizer(ip_sizer)
-                panel.SetSizer(sizer)
+                '''
                 self.tabs.append(panel)
                 panel.SetupScrolling()
                 self.notebook.AddPage(self.tabs[len(self.tabs) - 1], host[0])
